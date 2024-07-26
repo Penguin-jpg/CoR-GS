@@ -20,7 +20,7 @@ conda activate corgs
 ``````
 
 ``````
-pip install gaussian-splatting/submodules/diff-gaussian-rasterization-confidence
+pip install gaussian-splatting/submodules/diff-gaussian-rasterization
 pip install gaussian-splatting/submodules/simple-knn
 ``````
 

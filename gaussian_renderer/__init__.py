@@ -40,7 +40,6 @@ def render(viewpoint_camera, pc, pipe, bg_color : torch.Tensor, scaling_modifier
         # print("bg_color set to 000")
         bg_color = torch.tensor([0., 0., 0.]).cuda()
 
-    confidence = pc.confidence if pipe.use_confidence else torch.ones_like(pc.confidence)
     raster_settings = GaussianRasterizationSettings(
         image_height=int(viewpoint_camera.image_height),
         image_width=int(viewpoint_camera.image_width),
@@ -54,7 +53,6 @@ def render(viewpoint_camera, pc, pipe, bg_color : torch.Tensor, scaling_modifier
         campos=viewpoint_camera.camera_center,
         prefiltered=False,
         debug=pipe.debug,
-        confidence=confidence
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)

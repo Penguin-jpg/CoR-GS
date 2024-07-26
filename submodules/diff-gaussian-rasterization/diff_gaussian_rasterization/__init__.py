@@ -143,16 +143,15 @@ class _RasterizeGaussians(torch.autograd.Function):
         else:
              grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations = _C.rasterize_gaussians_backward(*args)
 
-        # print(grad_means3D.shape, grad_sh.shape, grad_colors_precomp.shape, grad_opacities.shape, grad_scales.shape, grad_rotations.shape, grad_cov3Ds_precomp.shape, grad_cov3Ds_precomp.shape, raster_settings.confidence.shape)
         grads = (
-            grad_means3D * raster_settings.confidence,
+            grad_means3D,
             grad_means2D,
-            grad_sh * raster_settings.confidence[..., None],
-            grad_colors_precomp * raster_settings.confidence,
-            grad_opacities * raster_settings.confidence,
-            grad_scales * raster_settings.confidence,
-            grad_rotations * raster_settings.confidence,
-            grad_cov3Ds_precomp * raster_settings.confidence,
+            grad_sh,
+            grad_colors_precomp,
+            grad_opacities,
+            grad_scales,
+            grad_rotations,
+            grad_cov3Ds_precomp,
             None,
         )
 
@@ -171,7 +170,6 @@ class GaussianRasterizationSettings(NamedTuple):
     campos : torch.Tensor
     prefiltered : bool
     debug : bool
-    confidence : torch.Tensor
 
 class GaussianRasterizer(nn.Module):
     def __init__(self, raster_settings):

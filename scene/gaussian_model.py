@@ -62,7 +62,6 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
         self.bg_color = torch.empty(0)
-        self.confidence = torch.empty(0)
 
     def capture(self):
         return (
@@ -155,7 +154,6 @@ class GaussianModel:
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
-        self.confidence = torch.ones_like(opacities, device="cuda")
         if self.args.train_bg:
             self.bg_color = nn.Parameter((torch.zeros(3, 1, 1) + 0.).cuda().requires_grad_(True))
 
@@ -359,7 +357,6 @@ class GaussianModel:
 
             self.denom = self.denom[valid_points_mask]
             self.max_radii2D = self.max_radii2D[valid_points_mask]
-            self.confidence = self.confidence[valid_points_mask]
 
 
     def cat_tensors_to_optimizer(self, tensors_dict):
@@ -410,7 +407,6 @@ class GaussianModel:
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
-        self.confidence = torch.cat([self.confidence, torch.ones(new_opacities.shape, device="cuda")], 0)
 
 
     def proximity(self, scene_extent, N = 3):

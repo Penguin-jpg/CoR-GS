@@ -69,7 +69,6 @@ class PipelineParams(ParamGroup):
         self.convert_SHs_python = False
         self.compute_cov3D_python = False
         self.debug = False
-        self.use_confidence = False
         self.use_color = True
         super().__init__(parser, "Pipeline Parameters")
 

@@ -1,23 +1,16 @@
-# Confidence based Differential Gaussian Rasterization
+# Differential Gaussian Rasterization
 
-**Feature**:
-1. Set a confidence score for each Gaussian and scale gradient with the confidence scores.
-2. Implement depth and alpha rendering.
-
-**Acknowledge**: Thanks to the [3D Gaussian Splatting](https://github.com/graphdeco-inria/diff-gaussian-rasterization) and [DreamGaussian](https://github.com/ashawkey/diff-gaussian-rasterization). 
+**NOTE**: this is a modified version to support depth & alpha rendering (both forward and backward) from the [original repository](https://github.com/graphdeco-inria/diff-gaussian-rasterization). 
 
 ```python
-raster_settings = GaussianRasterizationSettings(
-    image_height=int(viewpoint_camera.image_height),
-    ...
-    confidence=confidence
-)
-
-rasterizer = GaussianRasterizer(raster_settings=raster_settings)
-
 rendered_image, radii, rendered_depth, rendered_alpha = rasterizer(
     means3D=means3D,
-    ...
+    means2D=means2D,
+    shs=shs,
+    colors_precomp=colors_precomp,
+    opacities=opacity,
+    scales=scales,
+    rotations=rotations,
     cov3D_precomp=cov3D_precomp,
 )
 ```
