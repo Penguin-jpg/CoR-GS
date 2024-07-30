@@ -563,9 +563,11 @@ class CameraInfo_DN(NamedTuple):
     depth_mono: np.array
 
 def generateLLFFCameras(poses, bounds=None, train_cam_infos=None):
-    image = train_cam_infos[0].image
-    image_path = train_cam_infos[0].image_path
-    image_name = train_cam_infos[0].image_name
+    image = None
+    if train_cam_infos is not None:
+        image = train_cam_infos[0].image
+        image_path = train_cam_infos[0].image_path
+        image_name = train_cam_infos[0].image_name
 
     cam_infos = []
     Rs, tvecs, height, width, focal_length_x = pose_utils.convert_poses(poses) 
@@ -687,9 +689,57 @@ def CreateDTUSpiral(basedir):
                            ply_path=None)
     return scene_info
 
+def CreateLLFFSpiral(basedir):
+    # Load poses and bounds.
+    poses_arr = np.load(os.path.join(basedir, 'poses_bounds.npy'))
+    poses_o = poses_arr[:, :-2].reshape([-1, 3, 5])
+    bounds = poses_arr[:, -2:]
+
+    # Pull out focal length before processing poses.
+    # Correct rotation matrix ordering (and drop 5th column of poses).
+    fix_rotation = np.array([
+        [0, -1, 0, 0],
+        [1, 0, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+    ],
+                            dtype=np.float32)
+    inv_rotation = np.linalg.inv(fix_rotation)
+    poses = poses_o[:, :3, :4] @ fix_rotation
+
+    # Rescale according to a default bd factor.
+    # scale = 1. / (bounds.min() * .75)
+    # poses[:, :3, 3] *= scale
+    # bounds *= scale
+
+    # Recenter poses.
+    render_poses, _ = pose_utils.recenter_poses(poses)
+
+    # Separate out 360 versus forward facing scenes.
+    render_poses = pose_utils.generate_spiral_path(
+          render_poses, bounds, n_frames=180)
+    render_poses = pose_utils.backcenter_poses(render_poses, poses)
+    render_poses = render_poses @ inv_rotation
+    render_poses = np.concatenate([render_poses, np.tile(poses_o[:1, :3, 4:], (render_poses.shape[0], 1, 1))], -1)
+
+    render_cam_infos = generateLLFFCameras(render_poses.transpose([1,2,0]), bounds)
+
+    nerf_normalization = getNerfppNorm(render_cam_infos)
+
+    scene_info = SceneInfo_DN(point_cloud=None,
+                       train_cameras=None,
+                       test_cameras=render_cam_infos,
+                       eval_cameras=None,
+                       nerf_normalization=nerf_normalization,
+                       ply_path=None)
+
+    return scene_info
+
+
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
     "Blender" : readNerfSyntheticInfo,
     "DTU": readDTUSceneInfo,
     "SpiralDTU" : CreateDTUSpiral,
+    "Spiral": CreateLLFFSpiral,
 }

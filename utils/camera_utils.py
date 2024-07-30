@@ -55,6 +55,36 @@ def loadCam(args, id, cam_info, resolution_scale):
                   uid=id, data_device=args.data_device, image_name=cam_info.image_name,
                   depth_image=depth, mask=mask, bounds=cam_info.bounds, focalx=cam_info.focalx, focaly=cam_info.focaly, width=cam_info.width, height=cam_info.height)
 
+def loadRenderCam(args, id, cam_info, resolution_scale):
+    orig_w, orig_h = cam_info.width, cam_info.height
+
+    if args.resolution in [1, 2, 4, 8]:
+        resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
+    else:  # should be a type that converts to float
+        if args.resolution == -1:
+            if orig_w > 6400:
+                global WARNED
+                if not WARNED:
+                    print("[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 6.4K.\n "
+                        "If this is not desired, please explicitly specify '--resolution/-r' as 1")
+                    WARNED = True
+                global_down = orig_w / 6400
+            else:
+                global_down = 1
+        else:
+            global_down = orig_w / args.resolution
+
+        scale = float(global_down) * float(resolution_scale)
+        resolution = (int(orig_w / scale), int(orig_h / scale))
+
+    cam = Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
+           FoVx=cam_info.FovX, FoVy=cam_info.FovY,
+           image=None, gt_alpha_mask=None,
+           uid=id, data_device=args.data_device, image_name=cam_info.image_name,
+           depth_image=None, mask=None, bounds=cam_info.bounds, width=resolution, height=resolution)
+    cam.image_width, cam.image_height = resolution
+
+    return cam
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []
@@ -85,3 +115,11 @@ def camera_to_JSON(id, camera : Camera):
         'fx' : fov2focal(camera.FovX, camera.width)
     }
     return camera_entry
+
+def renderCameraList_from_camInfos(cam_infos, resolution_scale, args):
+    camera_list = []
+
+    for id, c in enumerate(cam_infos):
+        camera_list.append(loadRenderCam(args, id, c, resolution_scale))
+
+    return camera_list

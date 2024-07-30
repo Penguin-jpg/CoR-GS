@@ -17,7 +17,7 @@ from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
 from arguments import ModelParams
-from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
+from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON, renderCameraList_from_camInfos
 from utils.pose_utils import generate_random_poses_llff, generate_random_poses_360
 from scene.cameras import PseudoCamera
 
@@ -135,3 +135,48 @@ class Scene:
             return [None]
         else:
             return self.pseudo_cameras[scale]
+
+
+class RenderScene:
+
+    gaussians : GaussianModel
+
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, spiral=True, resolution_scales=[1.0]):
+        """b
+        :param path: Path to colmap scene main folder.
+        """
+        self.model_path = args.model_path
+        self.loaded_iter = None
+        self.gaussians = gaussians
+
+        if load_iteration:
+            if load_iteration == -1:
+                self.loaded_iter = searchForMaxIteration(os.path.join(self.model_path, "point_cloud"))
+            else:
+                self.loaded_iter = load_iteration
+            print("Loading trained model at iteration {}".format(self.loaded_iter))
+
+        self.test_cameras = {}
+
+        if 'scan' in args.source_path:
+            scene_info = sceneLoadTypeCallbacks["SpiralDTU"](args.source_path)
+        else:
+            scene_info = sceneLoadTypeCallbacks["Spiral"](args.source_path)
+
+        self.cameras_extent = scene_info.nerf_normalization["radius"]
+
+        for resolution_scale in resolution_scales:
+            print("Loading Render Cameras", resolution_scales)
+            self.test_cameras[resolution_scale] = renderCameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
+
+        if self.loaded_iter:
+            self.gaussians.load_ply(os.path.join(self.model_path,
+                                                           "point_cloud",
+                                                           "iteration_" + str(self.loaded_iter),
+                                                           "point_cloud.ply"))
+        else:
+            pass
+
+
+    def getRenderCameras(self, scale=1.0):
+        return self.test_cameras[scale]

@@ -43,10 +43,9 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
-    def __init__(self, args):
-        self.args = args
+    def __init__(self, sh_degree : int):
         self.active_sh_degree = 0
-        self.max_sh_degree = args.sh_degree
+        self.max_sh_degree = sh_degree
         self.init_point = torch.empty(0)
         self._xyz = torch.empty(0)
         self._features_dc = torch.empty(0)
@@ -62,6 +61,7 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
         self.bg_color = torch.empty(0)
+        self.prune_from_iter = 0
 
     def capture(self):
         return (
@@ -79,7 +79,7 @@ class GaussianModel:
             self.spatial_lr_scale,
         )
 
-    def restore(self, model_args, training_args):
+    def restore(self, model_args, training_args=None):
         (self.active_sh_degree,
          self._xyz,
          self._features_dc,
@@ -92,7 +92,8 @@ class GaussianModel:
          denom,
          opt_dict,
          self.spatial_lr_scale) = model_args
-        self.training_setup(training_args)
+        if training_args is not None:
+            self.training_setup(training_args)
         self.xyz_gradient_accum = xyz_gradient_accum
         self.denom = denom
         # self.optimizer.load_state_dict(opt_dict)
@@ -133,8 +134,7 @@ class GaussianModel:
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
 
         features = torch.zeros((fused_point_cloud.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
-        if self.args.use_color:
-            features[:, :3, 0] =  fused_color
+        features[:, :3, 0] =  fused_color
         features[:, 3:, 1:] = 0.0
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
@@ -154,9 +154,6 @@ class GaussianModel:
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
-        if self.args.train_bg:
-            self.bg_color = nn.Parameter((torch.zeros(3, 1, 1) + 0.).cuda().requires_grad_(True))
-
 
 
 
@@ -164,6 +161,7 @@ class GaussianModel:
         self.percent_dense = training_args.percent_dense
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.prune_from_iter = training_args.prune_from_iter
 
         l = [
             {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
@@ -173,8 +171,6 @@ class GaussianModel:
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
             {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
         ]
-        if self.args.train_bg:
-            l.append({'params': [self.bg_color], 'lr': 0.001, "name": "bg_color"})
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init * self.spatial_lr_scale,
@@ -342,7 +338,7 @@ class GaussianModel:
 
 
     def prune_points(self, mask, iter):
-        if iter > self.args.prune_from_iter:
+        if iter > self.prune_from_iter:
             valid_points_mask = ~mask
             optimizable_tensors = self._prune_optimizer(valid_points_mask)
 
@@ -428,7 +424,7 @@ class GaussianModel:
 
 
 
-    def densify_and_split(self, grads, grad_threshold, scene_extent, iter, N=2):
+    def densify_and_split(self, grads, grad_threshold, scene_extent, dist_thres, iter, N=2):
         n_init_points = self.get_xyz.shape[0]
         # Extract points that satisfy the gradient condition
         padded_grad = torch.zeros((n_init_points), device="cuda")
@@ -439,7 +435,7 @@ class GaussianModel:
                                                         dim=1).values > self.percent_dense * scene_extent)
 
         dist, _ = distCUDA2(self.get_xyz)
-        selected_pts_mask2 = torch.logical_and(dist > (self.args.dist_thres * scene_extent),
+        selected_pts_mask2 = torch.logical_and(dist > (dist_thres * scene_extent),
                                                torch.max(self.get_scaling, dim=1).values > ( scene_extent))
         selected_pts_mask = torch.logical_or(selected_pts_mask, selected_pts_mask2)
 
@@ -479,12 +475,12 @@ class GaussianModel:
                                    new_rotation)
 
 
-    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size, iter):
+    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size, dist_thres, iter):
         grads = self.xyz_gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
         
         self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent, iter)
+        self.densify_and_split(grads, max_grad, extent, dist_thres, iter)
         
         prune_mask = (self.get_opacity < min_opacity).squeeze()
         if max_screen_size:
@@ -551,4 +547,11 @@ class GaussianModel:
         if len(self.optimizer.state.keys()):
             optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
             self._opacity = optimizable_tensors["opacity"]
-    
+
+    def prune_points_inference(self, mask):
+        valid_points_mask = ~mask
+
+        self._xyz = self._xyz[valid_points_mask.expand(self._xyz.shape)].view(-1,3)
+        self._opacity = self._opacity[valid_points_mask.expand(self._opacity.shape)].view(-1,1)
+        self._scaling = self._scaling[valid_points_mask.expand(self._scaling.shape)].view(-1,3)
+        self._rotation = self._rotation[valid_points_mask.expand(self._rotation.shape)].view(-1,4)

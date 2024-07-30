@@ -54,7 +54,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 def render_sets(dataset : ModelParams, pipeline : PipelineParams, args):
 
     with torch.no_grad():
-        gaussians = GaussianModel(args)
+        gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(args, gaussians, load_iteration=args.iteration, shuffle=False)
         print(f"point number is {gaussians.get_xyz.shape[0]}")
 

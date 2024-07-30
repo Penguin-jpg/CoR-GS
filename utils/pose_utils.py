@@ -204,6 +204,32 @@ def generate_spiral_path_dtu_(poses, n_frames=120, n_rots=2, zrate=.5, perc=60):
   render_poses = np.stack(render_poses, axis=0)
   return render_poses
 
+def generate_spiral_path(poses, bounds, n_frames=120, n_rots=2, zrate=.5):
+  """Calculates a forward facing spiral path for rendering."""
+  # Find a reasonable 'focus depth' for this dataset as a weighted average
+  # of near and far bounds in disparity space.
+  close_depth, inf_depth = bounds.min() * .9, bounds.max() * 5.
+  dt = .75
+  focal = 1 / (((1 - dt) / close_depth + dt / inf_depth))
+
+  # Get radii for spiral path using 90th percentile of camera positions.
+  positions = poses[:, :3, 3]
+  radii = np.percentile(np.abs(positions), 90, 0)
+  radii = np.concatenate([radii, [1.]])
+
+  # Generate poses for spiral path.
+  render_poses = []
+  cam2world = poses_avg(poses)
+  up = poses[:, :3, 1].mean(0)
+  for theta in np.linspace(0., 2. * np.pi * n_rots, n_frames, endpoint=False):
+    t = radii * [np.cos(theta), -np.sin(theta), -np.sin(theta * zrate), 1.]
+    position = cam2world @ t
+    lookat = cam2world @ [0, 0, -focal, 1.]
+    z_axis = position - lookat
+    render_poses.append(viewmatrix(z_axis, up, position))
+  render_poses = np.stack(render_poses, axis=0)
+  return render_poses
+
 def pad_poses(p):
     """Pad [..., 3, 4] pose matrices with a homogeneous bottom row [0,0,0,1]."""
     bottom = np.broadcast_to([0, 0, 0, 1.], p[..., :1, :4].shape)

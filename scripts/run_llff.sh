@@ -21,3 +21,7 @@ python render.py \
 
 python metrics.py \
 --source_path $dataset -m $workspace \
+
+python spiral.py \
+-s $dataset --model_path $workspace \
+-r 8 --near 10

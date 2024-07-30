@@ -62,7 +62,7 @@ def training(dataset, opt, pipe, args):
             args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = GaussianModel(args)
+    gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(args, gaussians, shuffle=False)
     print(f"scene.bounds is {scene.bounds}")
     gaussians.training_setup(opt)
@@ -75,7 +75,7 @@ def training(dataset, opt, pipe, args):
         if i == 0:
             GsDict[f"gs{i}"] = gaussians
         elif i > 0:
-            GsDict[f"gs{i}"] = GaussianModel(args)
+            GsDict[f"gs{i}"] = GaussianModel(dataset.sh_degree)
             GsDict[f"gs{i}"].create_from_pcd(scene.init_point_cloud, scene.cameras_extent)
             GsDict[f"gs{i}"].training_setup(opt)
             print(f"Create gaussians{i}")
@@ -265,7 +265,7 @@ def training(dataset, opt, pipe, args):
 
                     for i in range(args.gaussiansN):
 
-                        GsDict[f"gs{i}"].densify_and_prune(opt.densify_grad_threshold, opt.prune_threshold, scene.cameras_extent, size_threshold, iteration)                              
+                    GsDict[f"gs{i}"].densify_and_prune(opt.densify_grad_threshold, opt.prune_threshold, scene.cameras_extent, size_threshold, opt.dist_thres, iteration)
 
             # Optimizer step
             if iteration < opt.iterations:
